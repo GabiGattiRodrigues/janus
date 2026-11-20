@@ -61,6 +61,11 @@ ALAV = {
 }
 
 
+def minus(x):
+    """Primeira letra minúscula no meio da frase, sem estragar sigla (CAC)."""
+    return x if x[:3].isupper() else x[0].lower() + x[1:]
+
+
 def V(p):
     return NOMES_EN.get(p, p) if EN else p
 
@@ -87,7 +92,7 @@ def gente(v_mil):
 
 def pct(v, casas=1, sinal=False):
     s = br(abs(v) if sinal else v, casas) + "%"
-    return (("+" if v >= 0 else "−") + s) if sinal else s
+    return (("+" if v >= 0 else "-") + s) if sinal else s   # hífen comum: o Streamlit lê o sinal pra pintar a seta
 
 
 def mes_txt(m):
@@ -297,7 +302,7 @@ with abas[1]:
     pos = neg[::-1]
     def frase(item):
         (p, a), v = item
-        return f"{V(p)} · {ALAV[a].lower()} ({'+' if v >= 0 else '−'}{din(abs(v))})"
+        return f"{V(p)} · {ALAV[a]} ({'+' if v >= 0 else '−'}{din(abs(v))})"
     piores = [frase(x) for x in list(neg.items())[:2] if x[1] < 0]
     melhores = [frase(x) for x in list(pos.items())[:2] if x[1] > 0]
     st.markdown(
@@ -320,9 +325,9 @@ with abas[1]:
           "months 600 times, each with a bit more or less activation, churn and CAC (as much as they varied in the past), "
           "and counting in how many the year closes above plan."),
         L(f"se a chance é {pct(chance_plano * 100, 0)}, em {round(chance_plano * 600)} das 600 simulações o ano fecha acima "
-          f"do plano. A maior perda até aqui é {V(ex_p)} em {ALAV[ex_a].lower()}: {din(abs(neg.iloc[0]))} a menos que o planejado.",
+          f"do plano. A maior perda até aqui é {V(ex_p)} em {minus(ALAV[ex_a])}: {din(abs(neg.iloc[0]))} a menos que o planejado.",
           f"if the chance is {pct(chance_plano * 100, 0)}, in {round(chance_plano * 600)} of the 600 simulations the year closes "
-          f"above plan. The biggest loss so far is {V(ex_p)} on {ALAV[ex_a].lower()}: {din(abs(neg.iloc[0]))} below plan."))
+          f"above plan. The biggest loss so far is {V(ex_p)} on {minus(ALAV[ex_a])}: {din(abs(neg.iloc[0]))} below plan."))
 
     c1, c2 = st.columns([1.1, 1])
     with c1:
@@ -740,16 +745,16 @@ with abas[6]:
         rampa = st.slider(L("Meses até todos os parceiros entrarem", "Months until all partners are live"), 1, 18, 6)
     with c2:
         st.markdown(L("**Assinantes e preço**", "**Subscribers and price**"))
-        ativ_p = st.slider(L("Ativação ao mês (% da elegível)", "Monthly activation (% of eligible)"), 0.1, 1.5, 0.45, 0.05, format="%.2f%%")
-        churn_p = st.slider(L("Churn ao mês (%)", "Monthly churn (%)"), 2.0, 15.0, 7.0, 0.5)
-        tarifa_p = st.slider(L("Tarifa por assinante (R$/mês)", "Fee per subscriber (R$/mo)"), 1.0, 6.0, 2.80, 0.1)
+        ativ_p = st.slider(L("Ativação ao mês (% da elegível)", "Monthly activation (% of eligible)"), 0.1, 1.5, 0.65, 0.05, format="%.2f%%")
+        churn_p = st.slider(L("Churn ao mês (%)", "Monthly churn (%)"), 2.0, 15.0, 6.5, 0.5)
+        tarifa_p = st.slider(L("Tarifa por assinante (R$/mês)", "Fee per subscriber (R$/mo)"), 1.0, 6.0, 2.90, 0.1)
         custo_p = st.slider(L("Custo de conteúdo (R$/assinante)", "Content cost (R$/subscriber)"), 0.5, 3.0, 1.30, 0.1)
     with c3:
         st.markdown(L("**Investimento**", "**Investment**"))
-        inv = st.number_input(L("Investimento inicial (R$ mil)", "Upfront investment (R$ K)"), value=6000, step=500,
+        inv = st.number_input(L("Investimento inicial (R$ mil)", "Upfront investment (R$ K)"), value=4500, step=500,
                               help=L("Catálogo local, tradução, integração com os parceiros, abertura de empresa.",
                                      "Local catalog, translation, partner integration, company setup."))
-        fixo_p = st.number_input(L("Custo fixo local (R$ mil/mês)", "Local fixed cost (R$ K/mo)"), value=380, step=20)
+        fixo_p = st.number_input(L("Custo fixo local (R$ mil/mês)", "Local fixed cost (R$ K/mo)"), value=320, step=20)
         desc = st.slider(L("Taxa de desconto (% ao ano)", "Discount rate (%/yr)"), 5, 30, 15)
         faixa = st.slider(L("Incerteza das premissas (±%)", "Assumption uncertainty (±%)"), 5, 50, 25, 5,
                           help=L("Quanto ativação, churn e tarifa podem variar pra cima ou pra baixo nas simulações.",
