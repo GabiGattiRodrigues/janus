@@ -1,0 +1,7 @@
+parceiro,tipo,base_dez25_mil,elegivel_dez25_mil,cresc_elegivel_mes,ativacao_mes,churn_mes,preco_unit,custo_unit,verba_mkt_mes_mil,cac,custo_fixo_mes_mil
+Banco Cerrado,B2B2C,521.8,4402.2,0.004,0.00527,0.0398,4.5,1.6,0.0,,5200
+Direto (app),Direto,270.2,0.0,0.0,,0.0817,21.0,5.5,900.0,42.8,5200
+Fintech Éter,B2B2C,150.32,1920.1,0.025,0.01195,0.0503,3.8,1.4,0.0,,5200
+Operadora Aurora,B2B2C,1322.26,9442.1,0.002,0.00876,0.0582,3.2,1.15,0.0,,5200
+Operadora Boreal,B2B2C,617.87,6447.2,0.003,0.00721,0.0728,2.9,1.05,0.0,,5200
+Varejo Delta,B2B2C,216.5,3072.8,0.001,0.00626,0.0866,2.4,1.35,0.0,,5200
