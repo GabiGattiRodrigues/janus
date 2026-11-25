@@ -77,7 +77,9 @@ def br(v, casas=0):
 
 
 def din(v_mil, casas=1):
-    """R$ em milhares → 'R$ 15,4 mi' / 'R$ 583 mil'."""
+    """R$ em milhares → 'R$ 15,4 mi' / 'R$ 583 mil' / '−R$ 1,2 mi'."""
+    if v_mil < 0:
+        return "−" + din(-v_mil, casas)
     if abs(v_mil) >= 1000:
         return f"R$ {br(v_mil / 1000, casas)}{L(' mi', 'M')}"
     return f"R$ {br(v_mil, 0)}{L(' mil', 'K')}"
@@ -95,6 +97,15 @@ def pct(v, casas=1, sinal=False):
     return (("+" if v >= 0 else "-") + s) if sinal else s   # hífen comum: o Streamlit lê o sinal pra pintar a seta
 
 
+def chance(pr):
+    """Chance em % para o card: com 600 simulações, 0 e 100 viram 'menos de 1%' e 'mais de 99%'."""
+    if pr <= 0:
+        return L("menos de 1%", "under 1%")
+    if pr >= 1:
+        return L("mais de 99%", "over 99%")
+    return pct(pr * 100, 0)
+
+
 def mes_txt(m):
     m = pd.Timestamp(m)
     nomes = i18n.MESES_EN if EN else i18n.MESES_PT
@@ -103,7 +114,7 @@ def mes_txt(m):
 
 LAYOUT = dict(margin=dict(l=10, r=10, t=60, b=10), height=380, hovermode="closest",
               plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-              legend=dict(orientation="h", yanchor="top", y=-0.15, x=0, font=dict(size=11)),
+              legend=dict(orientation="h", yanchor="top", y=-0.22, x=0, font=dict(size=11)),
               font=dict(size=12), separators=".," if EN else ",.")
 EIXO = dict(showgrid=True, gridcolor="rgba(128,128,128,0.15)", zeroline=False, linecolor="rgba(128,128,128,0.4)")
 
@@ -308,7 +319,7 @@ with abas[1]:
     st.markdown(
         f"<div class='kr' style='background:{fundo};border-left:6px solid {cor_t};min-height:0'>"
         f"<div class='t'>{L('O plano continua de pé?', 'Is the plan still standing?')}</div>"
-        f"<div class='b' style='color:{cor_t}'>{ic} {ver} · {pct(chance_plano * 100, 0)} {L('de chance de bater o ano', 'chance of hitting the year')}</div>"
+        f"<div class='b' style='color:{cor_t}'>{ic} {ver} · {chance(chance_plano)} {L('de chance de bater o ano', 'chance of hitting the year')}</div>"
         f"<div class='m'>{L('Aterrissagem do ano (mediana)', 'Year landing (median)')}: <b>{din(p50)}</b> · "
         f"{L('plano', 'plan')}: <b>{din(plano_ano)}</b> · {L('diferença', 'gap')}: <b>{din(p50 - plano_ano)}</b></div>"
         f"<div class='m' style='margin-top:6px'>{L('Puxando pra baixo', 'Dragging down')}: {'; '.join(piores) or '–'}<br>"
@@ -324,10 +335,12 @@ with abas[1]:
           "happened plus the forecast for the remaining months. The <b>chance of hitting</b> comes from simulating the remaining "
           "months 600 times, each with a bit more or less activation, churn and CAC (as much as they varied in the past), "
           "and counting in how many the year closes above plan."),
-        L(f"se a chance é {pct(chance_plano * 100, 0)}, em {round(chance_plano * 600)} das 600 simulações o ano fecha acima "
-          f"do plano. A maior perda até aqui é {V(ex_p)} em {minus(ALAV[ex_a])}: {din(abs(neg.iloc[0]))} a menos que o planejado.",
-          f"if the chance is {pct(chance_plano * 100, 0)}, in {round(chance_plano * 600)} of the 600 simulations the year closes "
-          f"above plan. The biggest loss so far is {V(ex_p)} on {minus(ALAV[ex_a])}: {din(abs(neg.iloc[0]))} below plan."))
+        L((f"se a chance é {chance(chance_plano)}, em {round(chance_plano * 600)} das 600 simulações o ano fecha acima do plano."
+           if chance_plano > 0 else "nenhuma das 600 simulações fecha o ano acima do plano: o buraco não cabe nos meses que faltam.") +
+          f" A maior perda até aqui é {V(ex_p)} em {minus(ALAV[ex_a])}: {din(abs(neg.iloc[0]))} a menos que o planejado.",
+          (f"if the chance is {chance(chance_plano)}, in {round(chance_plano * 600)} of the 600 simulations the year closes above plan."
+           if chance_plano > 0 else "none of the 600 simulations closes the year above plan: the gap doesn't fit in the months left.") +
+          f" The biggest loss so far is {V(ex_p)} on {minus(ALAV[ex_a])}: {din(abs(neg.iloc[0]))} below plan."))
 
     c1, c2 = st.columns([1.1, 1])
     with c1:
@@ -347,7 +360,7 @@ with abas[1]:
         hi = max(mc_plano_ytd, mc_real_ytd) + p.abs().sum() * 0.6
         lay(fig, L(f"<b>Ponte da margem</b> · jan a {mes_txt(REF)}, plano → realizado",
                    f"<b>Margin bridge</b> · Jan to {mes_txt(REF)}, plan → actual"), height=420)
-        fig.update_yaxes(range=[lo, hi], title=L("R$ mil", "R$ K"))
+        fig.update_yaxes(range=[lo, hi], title=L("R$ mil", "R$ K"), tickformat=",.0f")
         st.plotly_chart(fig, width="stretch")
     with c2:
         pv = pecas.pivot_table(index="parceiro", columns="alavanca", values="efeito_mil", aggfunc="sum")
@@ -358,8 +371,8 @@ with abas[1]:
         fig = go.Figure(go.Heatmap(
             z=z, x=[ALAV[c] for c in pv.columns], y=[V(i) for i in pv.index], zmin=-lim, zmax=lim,
             colorscale=[[0, VERMELHO], [0.5, "#ffffff"], [1, AZUL]], showscale=False,
-            text=np.vectorize(lambda v: ("+" if v >= 0 else "−") + din(abs(v)))(z), texttemplate="%{text}",
-            hovertemplate="%{y} · %{x}<br>%{text}<extra></extra>"))
+            text=np.vectorize(lambda v: "" if abs(v) < 0.5 else ("+" if v >= 0 else "−") + din(abs(v)))(z), texttemplate="%{text}",
+            textfont=dict(size=11), hovertemplate="%{y} · %{x}<br>%{text}<extra></extra>"))
         lay(fig, L("<b>De onde veio a diferença</b> · parceiro × alavanca", "<b>Where the gap came from</b> · partner × lever"), height=420)
         fig.update_yaxes(autorange="reversed", showgrid=False)
         fig.update_xaxes(showgrid=False, tickangle=-30)
@@ -390,11 +403,13 @@ with abas[1]:
         mf = pd.date_range(pd.Timestamp(REF) + pd.DateOffset(months=1), periods=resto, freq="MS")
         tot = sim_ano["mc"].sum(axis=1)
         fig.add_scatter(x=list(mf) + list(mf[::-1]), y=list(np.percentile(tot, 90, axis=0)) + list(np.percentile(tot, 10, axis=0)[::-1]),
-                        fill="toself", fillcolor="rgba(42,120,214,0.15)", line=dict(width=0), name=L("Faixa provável (P10–P90)", "Likely range (P10–P90)"),
+                        fill="toself", fillcolor="rgba(42,120,214,0.15)", line=dict(width=0), mode="lines", name=L("Faixa provável (P10–P90)", "Likely range (P10–P90)"),
                         hoverinfo="skip")
         fig.add_scatter(x=mf, y=np.median(tot, axis=0), name=L("Forecast (mediana)", "Forecast (median)"),
                         line=dict(color=AZUL, dash="dot", width=2.5), hovertemplate="%{x|%m/%Y}<br>%{y:,.0f}<extra></extra>")
-    lay(fig, L("<b>Margem de contribuição por mês em 2026</b> · R$ mil", "<b>Monthly contribution margin, 2026</b> · R$ K"), height=360)
+    lay(fig, L("<b>Margem de contribuição por mês em 2026</b> · R$ mil", "<b>Monthly contribution margin, 2026</b> · R$ K"), height=380)
+    fig.update_xaxes(tickformat="%m/%Y")
+    fig.update_yaxes(tickformat=",.0f")
     st.plotly_chart(fig, width="stretch")
     st.caption(L("Barras cinza = plano de cada mês. Linha azul-escura = o que aconteceu. Linha pontilhada = previsão dos meses "
                  "que faltam, com a faixa azul-clara mostrando onde o resultado deve cair em 8 de cada 10 simulações.",
@@ -459,7 +474,7 @@ with abas[2]:
     else:
         tot = simf[metrica].sum(axis=1)
     fig.add_scatter(x=list(mf) + list(mf[::-1]), y=list(np.percentile(tot, 90, axis=0)) + list(np.percentile(tot, 10, axis=0)[::-1]),
-                    fill="toself", fillcolor="rgba(42,120,214,0.13)", line=dict(width=0),
+                    fill="toself", fillcolor="rgba(42,120,214,0.13)", line=dict(width=0), mode="lines",
                     name=L("Faixa provável do cenário base (P10–P90)", "Base-case likely range (P10–P90)"), hoverinfo="skip")
     tabela = []
     cens = [("otimista", L("Otimista", "Optimistic"), VERDE, "dot", M.CENARIOS["otimista"]),
@@ -472,13 +487,18 @@ with abas[2]:
         anos = pd.Series(mm.year)
         for ano in sorted(anos.unique()):
             idx = np.where(anos == ano)[0]
-            tabela.append({L("Cenário", "Scenario"): nome_c, L("Ano", "Year"): str(ano),
+            rot_ano = str(ano)
+            if len(idx) < 12:   # ano incompleto: deixa claro quais meses entram
+                nomes_m = i18n.MESES_EN if EN else i18n.MESES_PT
+                rot_ano += f" ({nomes_m[mm[idx[0]].month - 1]}–{nomes_m[mm[idx[-1]].month - 1]})"
+            tabela.append({L("Cenário", "Scenario"): nome_c, L("Ano", "Year"): rot_ano,
                            L("Receita", "Revenue"): din(out["receita"][:, idx].sum()),
                            L("Margem de contribuição", "Contribution margin"): din(out["mc"][:, idx].sum()),
                            L("Resultado operacional", "Operating result"): din(out["mc"][:, idx].sum() - CUSTO_FIXO * len(idx)),
-                           L("Base no fim do ano", "Year-end base"): gente(out["base"][:, idx[-1]].sum())})
+                           L("Base no fim do período", "End-of-period base"): gente(out["base"][:, idx[-1]].sum())})
     lay(fig, L("<b>Realizado e forecast por cenário</b>", "<b>Actuals and forecast by scenario</b>"), height=440)
-    fig.update_yaxes(title=L("mil assinantes", "K subscribers") if metrica == "base" else L("R$ mil", "R$ K"))
+    fig.update_yaxes(title=L("mil assinantes", "K subscribers") if metrica == "base" else L("R$ mil", "R$ K"), tickformat=",.0f")
+    fig.update_xaxes(tickformat="%m/%Y")
     st.plotly_chart(fig, width="stretch")
     como_ler(
         L("a linha azul-escura é o que já aconteceu. Daí pra frente, cada linha é um <b>cenário</b>: um jeito diferente de o "
@@ -539,20 +559,23 @@ with abas[3]:
     fig.update_xaxes(title=L("R$ mil", "R$ K"), zeroline=True, zerolinecolor="rgba(128,128,128,0.6)")
     st.plotly_chart(fig, width="stretch")
     s_i = sens.set_index("alavanca")
+    _pr = c_premissas(ULT)
+    _b = real[real.mes == ULT].set_index("parceiro").base_final_mil.reindex(_pr.index)
+    churn_med = float((_pr.churn * _b).sum() / _b.sum() * 100)   # churn médio ponderado pela base
     caixa(L(
         f"<b>Como ler:</b> cada barra mostra quanto o resultado dos próximos 12 meses muda se só aquela alavanca andar {choque}%. "
         f"Preço é a que mais pesa ({din(abs(s_i.loc['preco','mais']))}), porque mexe na receita inteira. "
         f"Entre as que o time de negócio controla no dia a dia, <b>churn pesa mais que ativação</b>: "
         f"{choque}% a menos de churn vale {din(abs(s_i.loc['churn','menos']))}, contra {din(abs(s_i.loc['ativ','mais']))} de {choque}% a mais de ativação. "
         f"Ou seja, segurar quem já está na base rende mais do que trazer gente nova.<br><br><b>Exemplo:</b> hoje o churn médio é "
-        f"{pct(c_premissas(ULT).churn.mean() * 100, 1)} ao mês. Cair {choque}% seria ir pra uns {pct(c_premissas(ULT).churn.mean() * 100 * (1 - choque / 100), 1)}: "
+        f"{pct(churn_med, 1)} ao mês. Cair {choque}% seria ir pra uns {pct(churn_med * (1 - choque / 100), 1)}: "
         f"parece pouco, mas são {din(abs(s_i.loc['churn','menos']))} a mais no ano.",
         f"<b>How to read:</b> each bar shows how much the next 12 months' result changes if only that lever moves {choque}%. "
         f"Price weighs the most ({din(abs(s_i.loc['preco','mais']))}), because it hits all revenue. "
         f"Among the levers the business team controls day to day, <b>churn weighs more than activation</b>: "
         f"{choque}% less churn is worth {din(abs(s_i.loc['churn','menos']))}, versus {din(abs(s_i.loc['ativ','mais']))} for {choque}% more activation. "
         f"In other words, keeping who is already in the base pays more than bringing new people in.<br><br><b>Example:</b> average churn "
-        f"today is {pct(c_premissas(ULT).churn.mean() * 100, 1)} a month. A {choque}% drop takes it to about {pct(c_premissas(ULT).churn.mean() * 100 * (1 - choque / 100), 1)}: "
+        f"today is {pct(churn_med, 1)} a month. A {choque}% drop takes it to about {pct(churn_med * (1 - choque / 100), 1)}: "
         f"it looks small, but it's {din(abs(s_i.loc['churn','menos']))} more in the year."))
 
 # ================================================================== OKRs
@@ -597,7 +620,7 @@ with abas[4]:
         dict(obj=L("O1 · Crescer a base com rentabilidade", "O1 · Grow the base profitably"),
              kr=L(f"Churn médio do Q4 ≤ {pct(meta_churn)}", f"Average Q4 churn ≤ {pct(meta_churn)}"),
              v=churn_q4, meta=meta_churn, maior=False, fmt=lambda x: pct(x, 2),
-             base_ref=6.3, alav="churn", dono=L("Head de CRM", "Head of CRM"), fonte=L("cancelamentos ÷ base do início do mês", "cancellations ÷ start-of-month base")),
+             base_ref=(lambda s: s.cancelamentos_mil.sum() / s.base_inicial_mil.sum() * 100)(real[real.mes == "2026-09-01"]), alav="churn", dono=L("Head de CRM", "Head of CRM"), fonte=L("cancelamentos ÷ base do início do mês", "cancellations ÷ start-of-month base")),
         dict(obj=L("O1 · Crescer a base com rentabilidade", "O1 · Grow the base profitably"),
              kr=L(f"Margem de contribuição do Q4 ≥ {din(meta_mc)}", f"Q4 contribution margin ≥ {din(meta_mc)}"),
              v=out_.mc_mil.sum() + sq["mc"].sum(axis=(1, 2)), meta=meta_mc, maior=True, fmt=din,
@@ -633,7 +656,7 @@ with abas[4]:
             st.markdown(
                 f"<div class='kr' style='background:{fundo};border-left:6px solid {cor_t}'>"
                 f"<div class='m'>{k_['obj']}</div><div class='t'>{k_['kr']}</div>"
-                f"<div class='b' style='color:{cor_t}'>{pct(pr * 100, 0)} {L('de chance', 'chance')}</div>"
+                f"<div class='b' style='color:{cor_t}'>{chance(pr)} {L('de chance', 'chance')}</div>"
                 f"<div class='s' style='color:{cor_t}'>{ic} {rot}</div>"
                 f"<div class='m'>{L('Projeção (mediana)', 'Projection (median)')}: {k_['fmt'](float(np.median(k_['v'])))} · "
                 f"{L('linha de base (set)', 'baseline (Sep)')}: {k_['fmt'](k_['base_ref'])}</div></div>", unsafe_allow_html=True)
@@ -675,7 +698,9 @@ with abas[5]:
     st.subheader(L("Quem dá dinheiro e quem só dá volume", "Who brings money and who only brings volume"))
     rent = M.rentabilidade(real, ULT)
     fig = go.Figure(go.Scatter(
-        x=rent.base_media, y=rent.mc_pct, mode="markers+text", text=[V(p) for p in rent.index], textposition="top center",
+        x=rent.base_media, y=rent.mc_pct, mode="markers+text", text=[V(p) for p in rent.index],
+        textposition=[{"Banco Cerrado": "top left", "Operadora Boreal": "top right", M.DIRETO: "bottom center"}.get(p, "top center")
+                      for p in rent.index],
         marker=dict(size=np.sqrt(rent.mc.clip(lower=1)) / 3.2, color=[VERMELHO if p == "Varejo Delta" else AZUL for p in rent.index],
                     opacity=0.75, line=dict(width=1, color="white")),
         customdata=np.stack([rent.mc, rent.ltv, rent.churn], axis=1),
@@ -704,10 +729,10 @@ with abas[5]:
           "revenue that becomes margin; <b>bubble size</b> is the margin in reais. The ideal is a big bubble, high and to the right. "
           "<b>LTV</b> is how much margin a subscriber leaves over their whole stay: monthly margin ÷ churn."),
         L(f"no Varejo Delta, cada assinante deixa R$ {br(d_.mc_assinante_mes, 2)} de margem por mês e {pct(d_.churn)} cancelam todo mês, "
-          f"ou seja, o assinante fica em média uns {br(100 / d_.churn, 0)} meses. R$ {br(d_.mc_assinante_mes, 2)} × {br(100 / d_.churn, 0)} meses "
+          f"ou seja, o assinante fica em média uns {br(100 / d_.churn, 1)} meses. R$ {br(d_.mc_assinante_mes, 2)} × {br(100 / d_.churn, 1)} meses "
           f"= LTV de R$ {br(d_.ltv, 0)}.",
           f"at Delta Retail, each subscriber leaves R$ {br(d_.mc_assinante_mes, 2)} of margin per month and {pct(d_.churn)} cancel every month, "
-          f"so a subscriber stays about {br(100 / d_.churn, 0)} months on average. R$ {br(d_.mc_assinante_mes, 2)} × {br(100 / d_.churn, 0)} months "
+          f"so a subscriber stays about {br(100 / d_.churn, 1)} months on average. R$ {br(d_.mc_assinante_mes, 2)} × {br(100 / d_.churn, 1)} months "
           f"= LTV of R$ {br(d_.ltv, 0)}."))
     caixa(L(f"O <b>Varejo Delta</b> é o pior da carteira: churn de {pct(d_.churn)} ao mês e LTV de R$ {br(d_.ltv)}, contra "
             f"R$ {br(rent.drop('Varejo Delta').ltv.median())} da mediana dos outros. Ele traz volume, mas cada assinante fica pouco e deixa pouca margem.",
@@ -718,7 +743,7 @@ with abas[5]:
     b2b = [p for p in rent.index if p != M.DIRETO]
     alvo_p = s[0].selectbox(L("Parceiro", "Partner"), b2b, index=b2b.index("Varejo Delta"), format_func=V)
     alvo_mc = s[1].slider(L("Margem % desejada", "Target margin %"), 30, 80, 60, 5)
-    queda = s[2].slider(L("Churn depois da ação (%/mês)", "Churn after action (%/mo)"), 2.0, 12.0, float(round(rent.loc[alvo_p].churn, 1)), 0.5)
+    queda = s[2].slider(L("Churn depois da ação (%/mês)", "Churn after action (%/mo)"), 2.0, 12.0, float(round(rent.loc[alvo_p].churn * 2) / 2), 0.5, format="%.1f%%")
     pr_ = c_premissas(ULT).loc[alvo_p]
     tarifa_min = pr_.custo / (1 - alvo_mc / 100)
     ltv_novo = (pr_.preco - pr_.custo) / (queda / 100)
@@ -764,8 +789,10 @@ with abas[6]:
         fixo_p = st.number_input(L("Custo fixo local (R$ mil/mês)", "Local fixed cost (R$ K/mo)"), value=320, step=20)
         desc = st.slider(L("Taxa de desconto (% ao ano)", "Discount rate (%/yr)"), 5, 30, 15)
         faixa = st.slider(L("Incerteza das premissas (±%)", "Assumption uncertainty (±%)"), 5, 50, 25, 5,
-                          help=L("Quanto ativação, churn e tarifa podem variar pra cima ou pra baixo nas simulações.",
-                                 "How much activation, churn and fee can vary up or down in the simulations."))
+                          help=L("Quanto a ativação pode variar pra cima ou pra baixo nas simulações. O churn varia metade disso e a "
+                                 "tarifa, 40% disso, porque a tarifa é fechada em contrato e varia menos.",
+                                 "How much activation can vary up or down in the simulations. Churn varies half as much "
+                                 "and the fee 40% as much, because the fee is set in a contract and varies less."))
     elegivel = pop * smart / 100 * parc / 100
     regime = elegivel * (ativ_p / 100) / (churn_p / 100)
     p_bc = dict(elegivel=elegivel, ativ=ativ_p / 100, churn=churn_p / 100, tarifa=tarifa_p, custo=custo_p, investimento=inv,
@@ -817,10 +844,12 @@ with abas[6]:
           f"{gente(elegivel)} × {pct(ativ_p, 2)} ÷ {pct(churn_p, 1)} ≈ <b>{gente(regime)}</b> subscribers. Each leaves R$ {br(tarifa_p - custo_p, 2)} "
           f"a month (fee − cost), about {din(regime * (tarifa_p - custo_p))} a month, against {din(fixo_p)} of local fixed cost."))
     k = st.columns(4)
-    k[0].metric(L("VPL em 36 meses", "NPV over 36 months"), din(vpl))
+    k[0].metric(L("VPL em 36 meses", "NPV over 36 months"), din(vpl),
+                help=L("Conservador: conta só os 36 meses, sem valor residual da base que continua depois.",
+                       "Conservative: counts only the 36 months, with no terminal value for the base that carries on."))
     k[1].metric("Payback", L(f"mês {payback}", f"month {payback}") if payback else L("não se paga em 36 meses", "no payback in 36 months"))
-    k[2].metric(L("Chance de VPL positivo", "Chance of positive NPV"), pct(p_vpl * 100, 0))
-    k[3].metric(L("Chance de se pagar em até 24 meses", "Chance of payback within 24 months"), pct(p_pb24 * 100, 0))
+    k[2].metric(L("Chance de VPL positivo", "Chance of positive NPV"), chance(p_vpl))
+    k[3].metric(L("Chance de se pagar em até 24 meses", "Chance of payback within 24 months"), chance(p_pb24))
     if p_vpl >= 0.7:
         dec, cor_d = L("Seguir", "Go"), "verde"
         txt = L("Mesmo com as premissas variando, a entrada se paga na maioria dos cenários.", "Even with the assumptions varying, entry pays off in most scenarios.")
@@ -958,6 +987,7 @@ is swapped and you reach the actual.
     lay(fig, L("<b>Erro do forecast 3 meses à frente</b> · % (previsto ÷ realizado − 1), mês a mês no passado",
                "<b>3-month-ahead forecast error</b> · % (forecast ÷ actual − 1), month by month in the past"), barmode="group", height=340)
     fig.update_yaxes(title="%")
+    fig.update_xaxes(tickformat="%m/%Y")
     st.plotly_chart(fig, width="stretch")
     caixa(L(f"Em cada mês do passado, o Janus montou as premissas só com o que se sabia até ali e projetou 3 meses. "
             f"Erro médio (em módulo): <b>{br(bt.erro_mc.abs().mean(), 1)}%</b> na margem e <b>{br(bt.erro_base.abs().mean(), 1)}%</b> na base. "

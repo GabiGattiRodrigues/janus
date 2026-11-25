@@ -8,6 +8,8 @@ muda de língua -- muda só o separador (1.234,5 vira 1,234.5).
 
 from __future__ import annotations
 
+from decimal import ROUND_HALF_UP, Decimal
+
 import streamlit as st
 
 IDIOMAS = ("pt", "en")
@@ -59,7 +61,9 @@ def seletor() -> None:
 
 
 def num(x: float, casas: int = 0) -> str:
-    s = f"{x:,.{casas}f}"
+    # arredonda meio pra cima (562,5 → 563), igual ao gráfico; o format do Python arredondaria pro par
+    q = Decimal(1).scaleb(-casas)
+    s = f"{Decimal(repr(float(x))).quantize(q, rounding=ROUND_HALF_UP):,.{casas}f}"
     if en():
         return s
     return s.replace(",", "@").replace(".", ",").replace("@", ".")
