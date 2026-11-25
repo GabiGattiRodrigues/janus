@@ -277,7 +277,7 @@ with abas[1]:
         aterr = mc_real_ytd + sim_ano["mc"].sum(axis=(1, 2))
     else:
         aterr = np.array([mc_real_ytd])
-    chance_plano = float((aterr >= plano_ano).mean())
+    chance_plano = round(float((aterr >= plano_ano).mean()), 2)   # arredonda antes do farol: a cor bate com o % do card
 
     st.subheader(L(f"Leitura de {mes_txt(REF)}", f"Review of {mes_txt(REF)}"))
     k = st.columns(4)
@@ -505,12 +505,19 @@ with abas[2]:
             L("Churn/mês", "Churn/mo"): [pct(v * 100, 2) for v in t.churn],
             L("Preço", "Price"): [f"R$ {br(v, 2)}" for v in t.preco],
             L("Custo/assinante", "Cost/subscriber"): [f"R$ {br(v, 2)}" for v in t.custo],
+            L("Tendência", "Trend"): [", ".join(f"{nome} {pct(v * 100, 1, True)}{L('/mês', '/mo')}" for nome, v in
+                                                [(L("ativação", "activation"), a), ("churn", c), ("CAC", k)] if v) or "–"
+                                      for a, c, k in zip(t.tend_ativ, t.tend_churn, t.tend_cac)],
         })
         st.dataframe(mostra, hide_index=True, width="stretch")
         st.caption(L("Média dos últimos 12 meses com peso maior pros mais recentes (o peso cai pela metade a cada 3 meses); "
-                     "a ativação vem sem sazonalidade e a sazonalidade é recolocada mês a mês no forecast.",
+                     "a ativação vem sem sazonalidade e a sazonalidade é recolocada mês a mês no forecast. Quando ativação, "
+                     "churn ou CAC vêm subindo ou caindo de forma clara nos últimos 8 meses, a premissa parte do último mês "
+                     "e segue a tendência, que perde 20% de força a cada mês.",
                      "Average of the last 12 months, weighting recent months more (weight halves every 3 months); "
-                     "activation is deseasonalized and seasonality is put back month by month in the forecast."))
+                     "activation is deseasonalized and seasonality is put back month by month in the forecast. When activation, "
+                     "churn or CAC have been clearly rising or falling over the last 8 months, the assumption starts from the "
+                     "latest month and follows the trend, which loses 20% of its strength each month."))
     st.caption(L("Cenários: otimista = +10% ativação, −8% churn, −5% CAC, reajuste de 4%/ano; pessimista = −12% ativação, "
                  "+10% churn, +12% CAC, sem reajuste. A faixa azul vem de 600 simulações do cenário base.",
                  "Scenarios: optimistic = +10% activation, −8% churn, −5% CAC, 4%/yr price increase; pessimistic = −12% "
@@ -565,10 +572,10 @@ with abas[4]:
           "600 simulations of November and December is the target hit? The light sums it up: <b>green</b> = 70%+ (on track), "
           "<b>yellow</b> = 40–70% (at risk, worth acting), <b>red</b> = under 40% (off track: change the action or the target). "
           "Grey cards are KRs that can't be projected: one poorly written and one milestone (yes/no)."),
-        L("o KR de CAC do canal direto está vermelho porque o CAC vem subindo todo mês. Abra <b>Editar metas</b>, troque a meta de "
-          "R$ 48 pra R$ 52 e veja o card mudar de cor: a pergunta passa a ser se a meta era realista, não só se o time vai bater.",
-          "the direct-channel CAC KR is red because CAC has been rising every month. Open <b>Edit targets</b>, change the target from "
-          "R$ 48 to R$ 52 and watch the card change color: the question becomes whether the target was realistic, not just whether the team will hit it."))
+        L("o KR de CAC do canal direto está vermelho porque o CAC vem subindo todo mês, e o forecast segue essa subida. Abra <b>Editar metas</b>, troque a meta de "
+          "R$ 48 pra R$ 62 e veja o card mudar de cor: a pergunta passa a ser se a meta era realista, não só se o time vai bater.",
+          "the direct-channel CAC KR is red because CAC has been rising every month, and the forecast follows that rise. Open <b>Edit targets</b>, change the target from "
+          "R$ 48 to R$ 62 and watch the card change color: the question becomes whether the target was realistic, not just whether the team will hit it."))
     _, sq = c_sim(ULT, 2)
     out_ = real[real.mes == "2026-10-01"]
     i_dir, i_del = PAR.index(M.DIRETO), PAR.index("Varejo Delta")
@@ -620,7 +627,7 @@ with abas[4]:
     cols = st.columns(3)
     for n_, k_ in enumerate(krs):
         ok = (k_["v"] >= k_["meta"]) if k_["maior"] else (k_["v"] <= k_["meta"])
-        pr = float(ok.mean())
+        pr = round(float(ok.mean()), 2)   # arredonda antes do farol: a cor bate com o % do card
         fundo, cor_t, ic, rot = FAROL[farol(pr)]
         with cols[n_ % 3]:
             st.markdown(
@@ -765,8 +772,8 @@ with abas[6]:
                 fixo=fixo_p, rampa=rampa, desconto_aa=desc / 100, faixa_ativ=faixa / 100, faixa_churn=faixa / 200,
                 faixa_tarifa=faixa / 250)
     (fluxo, vpl, payback), sims_bc = M.business_case(p_bc, 36, np.random.default_rng(11), n_sim=800)
-    p_vpl = float((sims_bc.vpl > 0).mean())
-    p_pb24 = float((sims_bc.payback <= 24).mean())
+    p_vpl = round(float((sims_bc.vpl > 0).mean()), 2)
+    p_pb24 = round(float((sims_bc.payback <= 24).mean()), 2)
 
     f1, f2 = st.columns([1, 1.4])
     with f1:
@@ -869,7 +876,10 @@ realizado, forecast e simulação são só as premissas que entram nela. Por iss
 
 **2. Premissas recentes.** O ponto de partida do forecast é a média dos últimos 12 meses de cada alavanca, com peso
 maior pros meses recentes (o peso cai pela metade a cada 3 meses). Assim, se algo mudou em abril, o forecast já
-enxerga a mudança sem esquecer o histórico.
+enxerga a mudança sem esquecer o histórico. **Tendência:** se ativação, churn ou CAC vêm subindo ou caindo de forma
+clara nos últimos 8 meses (a reta passa no teste t ≥ 3), a premissa parte do último mês, não da média, e o forecast
+segue a subida, mas amortecida: ela perde 20% de força a cada mês, pra não projetar crescimento infinito. Uma mudança
+de degrau, como a da Aurora em abril, não vira tendência.
 
 **3. Sazonalidade.** A ativação tem meses mais fortes (janeiro, novembro) e mais fracos (junho). O fator de cada mês
 foi estimado em 2024–2025: a taxa do mês dividida pela média do ano daquele parceiro.
@@ -893,6 +903,10 @@ ativação de 0,7%. Entram 6.000.000 × 0,7% = 42 mil. Com churn de 7%, saem 500
 **Exemplo do peso (passo 2):** o mês mais recente vale 1; o de 3 meses atrás vale ½; o de 6 meses atrás, ¼. Se a
 ativação foi 0,8% por muito tempo e caiu pra 0,6% nos últimos 3 meses, a premissa fica mais perto de 0,6% do que de 0,8%.
 
+**Exemplo da tendência (passo 2):** o CAC do canal direto sobe uns 3% ao mês desde janeiro. Uma média, mesmo ponderada,
+ficaria atrás (perto de R$ 50, quando setembro já foi R$ 52). Com a tendência, a premissa parte de uns R$ 55 em outubro e
+o forecast de dezembro fica perto de R$ 58.
+
 **Exemplo da ponte (passo 5):** o plano previa R$ 100 de margem. Trocando só a ativação pela real, a conta dá R$ 97:
 a ativação "custou" R$ 3. Trocando também o churn, dá R$ 98: o churn "devolveu" R$ 1. E assim por diante até trocar
 tudo e chegar no realizado.
@@ -901,7 +915,10 @@ tudo e chegar no realizado.
 actuals, forecast and simulation only change the assumptions going in. That's why numbers match across tabs.
 
 **2. Recent assumptions.** The forecast starts from the last 12 months of each lever, weighting recent months more
-(the weight halves every 3 months). If something changed in April, the forecast already sees it without forgetting history.
+(the weight halves every 3 months). If something changed in April, the forecast already sees it without forgetting history. **Trend:** if activation, churn or CAC have been clearly rising or falling
+over the last 8 months (the line passes a t ≥ 3 test), the assumption starts from the latest month, not the average, and
+the forecast follows the trend, but damped: it loses 20% of its strength each month, so it never projects endless growth.
+A step change, like Aurora's in April, doesn't become a trend.
 
 **3. Seasonality.** Activation has stronger months (January, November) and weaker ones (June). Each month's factor was
 estimated on 2024–2025: the month's rate divided by that partner's yearly average.
@@ -924,6 +941,10 @@ activation rate. In come 6,000,000 × 0.7% = 42K. With 7% churn, out go 500K × 
 
 **Example of the weighting (step 2):** the latest month weighs 1; 3 months ago weighs ½; 6 months ago, ¼. If activation
 was 0.8% for a long time and dropped to 0.6% in the last 3 months, the assumption lands closer to 0.6% than to 0.8%.
+
+**Example of the trend (step 2):** direct-channel CAC has risen about 3% a month since January. An average, even a weighted
+one, would lag behind (around R$ 50, when September was already R$ 52). With the trend, the assumption starts at about
+R$ 55 in October and the December forecast lands near R$ 58.
 
 **Example of the bridge (step 5):** the plan expected R$ 100 of margin. Swapping only activation for the actual, the math
 gives R$ 97: activation "cost" R$ 3. Swapping churn too, it gives R$ 98: churn "gave back" R$ 1. And so on until everything

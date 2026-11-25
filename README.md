@@ -27,6 +27,8 @@ reajuste de tarifa, CAC subindo), pra dar pra conferir se a leitura do mês enco
 - Uma conta só, mês a mês e por parceiro: `base = base anterior + ativações − cancelamentos`;
   ativações = elegíveis × taxa (parceiros) ou verba ÷ CAC (direto); margem = receita − custo de conteúdo − verba.
 - Premissas recentes: média dos últimos 12 meses com meia-vida de 3 meses; ativação dessazonalizada.
+- Tendência amortecida: ativação, churn ou CAC com tendência clara nos últimos 8 meses (teste t ≥ 3) partem do
+  último mês e seguem a inclinação, que perde 20% de força por mês; mudança de degrau não vira tendência.
 - Monte Carlo: desvio persistente do tamanho da variação histórica + deriva que cresce com o horizonte.
 - Ponte de variação por substituição sequencial (as peças somam exatamente a diferença).
 - Backtest: forecast 3 meses à frente refeito em cada mês do passado.

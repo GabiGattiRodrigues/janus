@@ -23,6 +23,33 @@ PASTA_DADOS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 DIRETO = "Direto (app)"
 ALAVANCAS = ["elegivel", "ativ", "verba", "cac", "churn", "preco", "custo"]
 MEIA_VIDA = 3          # meses: peso das premissas recentes cai pela metade a cada 3 meses
+JANELA_TEND = 8        # meses usados pra ver se a alavanca vem subindo ou caindo
+T_MIN = 3.0            # só aceita a tendência se ela for bem clara (estatística t da inclinação ≥ 3)
+AMORTECE = 0.8         # a tendência perde 20% de força a cada mês do forecast
+
+
+def tendencia(x):
+    """
+    Inclinação (em % ao mês) dos últimos JANELA_TEND meses, numa reta sobre o log da série.
+    Devolve (inclinação, nível no último mês). Se a tendência não for clara (|t| < T_MIN),
+    devolve (0, None) e a premissa fica com a média ponderada.
+    """
+    x = np.asarray(x, dtype=float)[-JANELA_TEND:]
+    if len(x) < JANELA_TEND or np.any(x <= 0):
+        return 0.0, None
+    y, t = np.log(x), np.arange(len(x))
+    b, a = np.polyfit(t, y, 1)
+    resid = y - (a + b * t)
+    se = np.sqrt((resid ** 2).sum() / (len(x) - 2) / ((t - t.mean()) ** 2).sum())
+    if se == 0 or abs(b / se) < T_MIN:
+        return 0.0, None
+    return float(b), float(np.exp(a + b * t[-1]))
+
+
+def fator_tendencia(inclinacao, passos):
+    """Efeito acumulado da tendência amortecida depois de `passos` meses."""
+    soma = AMORTECE * (1 - AMORTECE ** passos) / (1 - AMORTECE)
+    return np.exp(inclinacao * soma)
 
 
 # ------------------------------------------------------------------ dados
@@ -165,8 +192,9 @@ def ponte(real, plano, parceiros, sazonal, ate):
 def premissas_recentes(real, parceiros, ate, sazonal, janela=12):
     """
     Premissa de cada alavanca = média dos últimos meses com peso maior pros mais recentes
-    (meia-vida de 3 meses), tirando a sazonalidade da ativação. Também guarda a variação
-    mês a mês de cada taxa, que vira a incerteza do forecast.
+    (meia-vida de 3 meses), tirando a sazonalidade da ativação. Ativação, churn e CAC que vêm
+    subindo ou caindo de forma clara nos últimos 8 meses ganham tendência (amortecida no forecast).
+    Também guarda a variação mês a mês de cada taxa, que vira a incerteza do forecast.
     """
     meses = pd.date_range(pd.Timestamp(ate) - pd.DateOffset(months=janela - 1), ate, freq="MS")
     d = drivers_realizados(real, parceiros, meses)
@@ -187,13 +215,19 @@ def premissas_recentes(real, parceiros, ate, sazonal, janela=12):
         verba_des = d["verba"][i] / s
         cresc = (d["elegivel"][i, -1] / d["elegivel"][i, valido][0]) ** (1 / max(1, valido.sum() - 1)) - 1 \
             if p != DIRETO else 0.0
+        # tendência: se a alavanca vem andando de forma clara, o nível parte do último mês da reta
+        # (não da média, que fica pra trás) e o forecast segue a inclinação, amortecida
+        t_ativ, n_ativ = tendencia(ativ_des[valido]) if p != DIRETO else (0.0, None)
+        t_churn, n_churn = tendencia(d["churn"][i][valido])
+        t_cac, n_cac = tendencia(d["cac"][i][valido]) if p == DIRETO else (0.0, None)
         linhas.append(dict(
             parceiro=p, direto=p == DIRETO,
             elegivel=d["elegivel"][i, -1], cresc=cresc,
-            ativ=media(ativ_des) if p != DIRETO else 0.0,
+            ativ=(n_ativ or media(ativ_des)) if p != DIRETO else 0.0,
             verba=media(verba_des) if p == DIRETO else 0.0,
-            cac=media(d["cac"][i]) if p == DIRETO else 1.0,
-            churn=media(d["churn"][i]), preco=d["preco"][i, -1], custo=media(d["custo"][i]),
+            cac=(n_cac or media(d["cac"][i])) if p == DIRETO else 1.0,
+            churn=n_churn or media(d["churn"][i]), preco=d["preco"][i, -1], custo=media(d["custo"][i]),
+            tend_ativ=t_ativ, tend_churn=t_churn, tend_cac=t_cac,
             cv_ativ=cv(ativ_des) if p != DIRETO else 0.0,
             cv_cac=cv(d["cac"][i]) if p == DIRETO else 0.0,
             cv_churn=cv(d["churn"][i]),
@@ -222,10 +256,10 @@ def drivers_futuros(prem, meses, sazonal, mult=None, mult_parceiro=None):
             s = sazonal[m.month]
             anos = (j + 1) / 12
             d["elegivel"][i, j] = x.elegivel * (1 + x.cresc * mult.get("cresc", 1.0)) ** (j + 1)
-            d["ativ"][i, j] = x.ativ * s * mult["ativ"] * mp.get("ativ", 1.0)
+            d["ativ"][i, j] = x.ativ * fator_tendencia(x.tend_ativ, j + 1) * s * mult["ativ"] * mp.get("ativ", 1.0)
             d["verba"][i, j] = x.verba * s * mult["verba"] * mp.get("verba", 1.0)
-            d["cac"][i, j] = x.cac * mult["cac"] * mp.get("cac", 1.0)
-            d["churn"][i, j] = min(0.5, x.churn * mult["churn"] * mp.get("churn", 1.0))
+            d["cac"][i, j] = x.cac * fator_tendencia(x.tend_cac, j + 1) * mult["cac"] * mp.get("cac", 1.0)
+            d["churn"][i, j] = min(0.5, x.churn * fator_tendencia(x.tend_churn, j + 1) * mult["churn"] * mp.get("churn", 1.0))
             # reajuste anual de preço a cada janeiro
             reaj = (1 + mult["reajuste"]) ** sum(1 for mm in meses[:j + 1] if mm.month == 1)
             d["preco"][i, j] = x.preco * reaj * mp.get("preco", 1.0)
