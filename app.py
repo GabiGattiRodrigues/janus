@@ -282,10 +282,10 @@ digraph {{
     st.caption(L(f"Valores de {mes_txt(ULT)}, em reais e assinantes do mês.", f"Values for {mes_txt(ULT)}, in reais and subscribers for the month."))
     st.info(L("Base sintética e empresa fictícia. Os desvios de 2026 foram plantados de propósito (estão listados em "
               "Como funciona), pra dar pra conferir se a leitura do mês encontra o que aconteceu. Projeto autoral de "
-              "portfólio: junta técnicas que uso no dia a dia (forecast, safras, simulação) num problema de planejamento.",
+              "portfólio: junta técnicas que uso no dia a dia (forecast, análise de desvio, simulação) num problema de planejamento.",
               "Synthetic data and a fictional company. The 2026 deviations were planted on purpose (listed in How it "
               "works), so you can check whether the monthly review finds what happened. An original portfolio project: "
-              "it brings techniques I use day to day (forecasting, cohorts, simulation) into a planning problem."))
+              "it brings techniques I use day to day (forecasting, variance analysis, simulation) into a planning problem."))
 
 # ================================================================== LEITURA DO MÊS
 # Pergunta: o plano continua de pé?
