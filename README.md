@@ -39,6 +39,16 @@ Outros: `pip install -r requirements.txt` e `streamlit run app.py`.
 
 Para regerar a base: `python dados/gerar_base.py`.
 
+## Por onde começar a ler o código
+1. **`dados/gerar_base.py`**: cria a empresa fictícia e planta os desvios de 2026 (função `desvio_2026`).
+2. **`janus/modelo.py`**: todas as contas. Começa pela `rodar` (a conta do mês, que serve pra tudo); depois
+   `ponte` (plano → realizado), `premissas_recentes` e `tendencia` (ponto de partida do forecast), `simular`
+   (Monte Carlo), `backtest`, `sensibilidade`, `rentabilidade` e `business_case`.
+3. **`app.py`**: uma seção por aba, cada uma começando com um comentário que diz a pergunta que ela responde e os
+   passos da conta. O app só chama o modelo e desenha.
+
+O código é comentado em português, passo a passo.
+
 ## Estrutura
 ```
 app.py                 app Streamlit
@@ -58,5 +68,7 @@ and partner), plan & scenarios (12–36 month forecast with P10–P90 band), sen
 chance of hitting each KR), partners (profitability, LTV, renegotiation simulator), new country (market sizing, NPV,
 payback, chance of success), how it works (with forecast backtest) and glossary. **Synthetic data** with deviations
 planted in 2026. The whole app switches to English with the PT/EN toggle in the sidebar (or `?lang=en`).
+
+**Reading the code:** start with `dados/gerar_base.py` (fictional company and planted deviations), then `janus/modelo.py` (all the math, starting from `rodar`), then `app.py` (one section per tab). Comments are in Portuguese.
 
 Gabriela Gatti Rodrigues · [Portfólio](https://gabigattirodrigues.github.io/) · [LinkedIn](https://linkedin.com/in/gabriela-gatti-rodrigues)

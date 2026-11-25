@@ -31,6 +31,8 @@ MESES = pd.date_range("2024-01-01", "2026-10-01", freq="MS")
 # elegivel: clientes do parceiro com acesso ao app (milhares); cresc: crescimento mensal da elegível
 # ativ: % da elegível que ativa no mês; churn: % da base que cancela no mês
 # tarifa: R$ que o parceiro paga por assinante ativo/mês; custo: R$ de conteúdo (royalties) por assinante ativo/mês
+# Lendo assim: a Aurora tem 9 milhões de elegíveis, 0,85% ativam por mês, 6% da base cancela por mês,
+# paga R$ 3,20 por assinante e o conteúdo custa R$ 1,15 por assinante.
 PARCEIROS = {
     "Operadora Aurora": dict(tipo="B2B2C", inicio="2024-01", elegivel=9000, cresc=0.002,
                              ativ=0.0085, churn=0.060, tarifa=3.20, custo=1.15),
@@ -60,6 +62,7 @@ def desvio_2026(nome, data):
     if data.year < 2026:
         return d
     m = data.month
+    # Cada if é um problema (ou surpresa boa) que o plano não previa. A Leitura do mês tem que achar todos.
     if nome == "Operadora Aurora" and m >= 4:        # parceiro escondeu o app no menu novo
         d["ativ"] = 0.72
     if nome == "Varejo Delta":                        # churn piorando mês a mês
@@ -90,6 +93,7 @@ def simular_parceiro(nome, p, rng):
         if data < inicio:
             continue
         dv = desvio_2026(nome, data)
+        # Ruído de ±6% na ativação, pra base não ficar perfeita demais.
         ruido = rng.normal(1.0, 0.06)
         if p["tipo"] == "Direto":
             verba = p["verba"] * fator_sazonal(data.month) * rng.normal(1.0, 0.05)
@@ -106,6 +110,7 @@ def simular_parceiro(nome, p, rng):
                 taxa *= min(1.0, 0.4 + 0.15 * meses_vida)
             ativacoes = elegivel * taxa
             preco = p["tarifa"] * dv["tarifa"]
+        # Churn com ruído de ±5% e teto de 50%.
         churn = min(0.5, p["churn"] * dv["churn"] * rng.normal(1.0, 0.05))
         cancelamentos = base * churn
         base_ini = base
@@ -129,6 +134,7 @@ def montar_plano(real):
     taxas = média de jun a nov/2025 (com um pouco de ambição na ativação),
     tarifas e custos = contrato vigente, verba do direto = orçamento aprovado.
     """
+    # Usando jun a nov/2025, que era o que o time tinha na mão quando fez o plano.
     jan = real[(real.mes >= "2025-06-01") & (real.mes <= "2025-11-01")]
     linhas = []
     for nome, g in jan.groupby("parceiro"):

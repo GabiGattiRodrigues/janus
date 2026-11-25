@@ -19,6 +19,7 @@ MESES_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
+# Língua ativa da sessão (padrão: português).
 def idioma() -> str:
     try:
         return st.session_state.get("idioma", "pt")
@@ -60,6 +61,7 @@ def seletor() -> None:
         label_visibility="collapsed", selection_mode="single")
 
 
+# Formatando número: em PT o milhar é ponto e o decimal é vírgula (1.234,5); em EN é o contrário.
 def num(x: float, casas: int = 0) -> str:
     # arredonda meio pra cima (562,5 → 563), igual ao gráfico; o format do Python arredondaria pro par
     q = Decimal(1).scaleb(-casas)

@@ -10,9 +10,15 @@ from janus import i18n
 from janus import modelo as M
 from janus.i18n import L
 
+# Como o app está organizado:
+# - janus/modelo.py faz todas as contas (o app só chama e desenha)
+# - janus/i18n.py cuida do PT/EN
+# - dados/ tem a base sintética e o plano de 2026
+# Cada aba abaixo começa com um bloco explicando a pergunta que ela responde.
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 st.set_page_config(page_title="Janus · plano e forecast · planning & forecast",
                    page_icon=os.path.join(RAIZ, "assets", "janus_icone.png"), layout="wide")
+# Lendo a língua da URL (?lang=en) antes de qualquer texto aparecer.
 i18n.iniciar()
 EN = i18n.en()
 
@@ -24,6 +30,7 @@ CINZA = "#8a8984"
 VERDE = "#1baf7a"
 VERMELHO = "#e34948"
 AMARELO = "#eda100"
+# Cores do farol: verde >= 70% de chance, amarelo 40% a 70%, vermelho < 40%.
 FAROL = {  # fundo, cor do texto, ícone
     "verde": ("#e5f4e4", "#1b7a3a", "🟢", L("No caminho", "On track")),
     "amarelo": ("#fdf3d7", "#8a6100", "🟡", L("Em risco", "At risk")),
@@ -51,8 +58,10 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ língua e formatos
+# Nome dos parceiros em inglês (os dados ficam em português).
 NOMES_EN = {"Operadora Aurora": "Aurora Telecom", "Operadora Boreal": "Boreal Telecom", "Banco Cerrado": "Cerrado Bank",
             "Varejo Delta": "Delta Retail", "Fintech Éter": "Éter Fintech", "Direto (app)": "Direct (app)"}
+# Nome de cada alavanca do jeito que aparece na tela.
 ALAV = {
     "elegivel": L("Clientes elegíveis", "Eligible customers"), "ativ": L("Ativação", "Activation"),
     "verba": L("Verba de marketing (direto)", "Marketing budget (direct)"), "cac": L("CAC (direto)", "CAC (direct)"),
@@ -112,6 +121,7 @@ def mes_txt(m):
     return f"{nomes[m.month - 1]}/{m.year}"
 
 
+# Padrão visual de todos os gráficos: fundo transparente, legenda embaixo e separador de milhar da língua.
 LAYOUT = dict(margin=dict(l=10, r=10, t=60, b=10), height=380, hovermode="closest",
               plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
               legend=dict(orientation="h", yanchor="top", y=-0.22, x=0, font=dict(size=11)),
@@ -148,6 +158,8 @@ def carregar():
     return real, plano, par, saz
 
 
+# Carregando uma vez só: realizado, plano, ordem dos parceiros e fatores sazonais.
+# ULT = último mês com realizado (out/2026). As funções c_* guardam em cache as contas mais pesadas.
 real, plano, PAR, SAZ = carregar()
 ULT = real.mes.max()
 CUSTO_FIXO = float(plano.custo_fixo_mes_mil.iloc[0])
@@ -180,6 +192,7 @@ def c_backtest():
 
 
 # ------------------------------------------------------------------ barra lateral
+# Barra lateral: idioma, imagem do Janus e o mês de referência da Leitura do mês.
 with st.sidebar:
     i18n.seletor()
     st.image(os.path.join(RAIZ, "assets", "janus_capa.jpg"), width=180)
@@ -207,11 +220,13 @@ st.title("Janus")
 st.markdown(L("**Plano, forecast, OKRs e business case** de um app de assinatura vendido por parceiros (B2B2C) e direto no app.",
               "**Plan, forecast, OKRs and business case** for a subscription app sold through partners (B2B2C) and directly in the app."))
 
+# As 9 abas, na ordem em que fazem sentido pra quem vai decidir.
 abas = st.tabs([L("O case", "The case"), L("Leitura do mês", "Monthly review"), L("Plano e cenários", "Plan & scenarios"),
                 L("Sensibilidade", "Sensitivity"), "OKRs", L("Parceiros", "Partners"), L("Novo país", "New country"),
                 L("Como funciona", "How it works"), L("Glossário", "Glossary")])
 
 # ================================================================== O CASE
+# Apresenta a empresa (Lumina), a pergunta do mês e a árvore da conta com os números do último mês.
 with abas[0]:
     st.subheader(L("A pergunta", "The question"))
     caixa(L(
@@ -273,14 +288,21 @@ digraph {{
               "it brings techniques I use day to day (forecasting, cohorts, simulation) into a planning problem."))
 
 # ================================================================== LEITURA DO MÊS
+# Pergunta: o plano continua de pé?
+# 1. Comparando o mês e o acumulado do ano com o plano
+# 2. Projetando os meses que faltam (600 simulações) e contando em quantas o ano bate o plano
+# 3. Abrindo a diferença por alavanca (ponte) e por parceiro (mapa)
+# 4. Sugerindo o que ajustar a partir das maiores perdas
 with abas[1]:
     meses_pl, pl = c_plano()
+    # Ponte plano → realizado de jan até o mês de referência.
     pecas, mc_plano_ytd, mc_real_ytd = c_ponte(REF)
     i_ref = list(meses_pl).index(pd.Timestamp(REF))
     r_mes = real[real.mes == REF]
     mc_mes, mc_mes_pl = r_mes.mc_mil.sum(), pl["mc"][:, i_ref].sum()
     base_mes, base_mes_pl = r_mes.base_final_mil.sum(), pl["base"][:, i_ref].sum()
     churn_mes = r_mes.cancelamentos_mil.sum() / r_mes.base_inicial_mil.sum() * 100
+    # Aterrissagem = realizado até agora + forecast dos meses que faltam, em cada simulação.
     resto = 12 - (i_ref + 1)
     plano_ano = pl["mc"].sum()
     if resto > 0:
@@ -288,6 +310,7 @@ with abas[1]:
         aterr = mc_real_ytd + sim_ano["mc"].sum(axis=(1, 2))
     else:
         aterr = np.array([mc_real_ytd])
+    # Chance de bater o plano do ano = % das simulações em que a aterrissagem passa o plano.
     chance_plano = round(float((aterr >= plano_ano).mean()), 2)   # arredonda antes do farol: a cor bate com o % do card
 
     st.subheader(L(f"Leitura de {mes_txt(REF)}", f"Review of {mes_txt(REF)}"))
@@ -301,6 +324,7 @@ with abas[1]:
     k[3].metric(L("Churn do mês", "Churn, month"), pct(churn_mes, 2))
 
     # veredito
+    # Veredito na cor do farol.
     if chance_plano >= 0.7:
         ver, cor_v = L("De pé", "Standing"), "verde"
     elif chance_plano >= 0.4:
@@ -309,6 +333,7 @@ with abas[1]:
         ver, cor_v = L("Precisa de ajuste", "Needs adjusting"), "vermelho"
     fundo, cor_t, ic, _ = FAROL[cor_v]
     p50 = float(np.median(aterr))
+    # Ordenando as peças da ponte: as mais negativas puxam pra baixo, as mais positivas seguram.
     neg = pecas.groupby(["parceiro", "alavanca"]).efeito_mil.sum().sort_values()
     pos = neg[::-1]
     def frase(item):
@@ -347,6 +372,7 @@ with abas[1]:
         ordem = ["elegivel", "ativ", "verba", "cac", "churn", "preco", "custo"]
         p = pecas.groupby("alavanca").efeito_mil.sum().reindex(ordem)
         p = p[p.abs() > 0.5]
+        # Ponte (cascata): começa no plano, cada barra é uma alavanca e termina no realizado.
         fig = go.Figure(go.Waterfall(
             x=[L("Plano", "Plan")] + [ALAV[a] for a in p.index] + [L("Realizado", "Actual")],
             measure=["absolute"] + ["relative"] * len(p) + ["total"],
@@ -363,6 +389,7 @@ with abas[1]:
         fig.update_yaxes(range=[lo, hi], title=L("R$ mil", "R$ K"), tickformat=",.0f")
         st.plotly_chart(fig, width="stretch")
     with c2:
+        # Mapa parceiro × alavanca: a mesma ponte aberta por parceiro.
         pv = pecas.pivot_table(index="parceiro", columns="alavanca", values="efeito_mil", aggfunc="sum")
         pv = pv.reindex(index=PAR, columns=[a for a in ordem if a in pv.columns])
         pv = pv.loc[:, pv.abs().max() > 0.5]
@@ -392,6 +419,7 @@ with abas[1]:
           f"money, the app brought fewer subscribers than planned, because each one got more expensive."))
 
     # mensal: plano x realizado x aterrissagem
+    # Gráfico do ano: barras do plano, linha do realizado e forecast com a faixa P10–P90.
     hist = real[real.mes >= "2026-01-01"].groupby("mes").mc_mil.sum()
     hist = hist[hist.index <= REF]
     fig = go.Figure()
@@ -416,6 +444,7 @@ with abas[1]:
                  "Grey bars = each month's plan. Dark-blue line = what happened. Dotted line = forecast for the remaining months, "
                  "with the light-blue band showing where the result should land in 8 out of 10 simulations."))
 
+    # Uma sugestão de ação pra cada uma das maiores perdas da ponte.
     with st.expander(L("O que ajustar (sugestões a partir da ponte)", "What to adjust (suggestions from the bridge)")):
         dicas = {
             "ativ": L("ativação abaixo do plano: entender com o parceiro o que mudou na jornada (app, menu, oferta) e rever a meta de ativação do resto do ano",
@@ -435,6 +464,9 @@ with abas[1]:
                 st.markdown(f"- **{V(p_)}** ({'−'}{din(abs(v_))}): {dicas[a_]}")
 
 # ================================================================== PLANO E CENÁRIOS
+# Pergunta: pra onde o negócio vai nos próximos 1 a 3 anos?
+# O forecast parte das premissas recentes de cada parceiro (com tendência quando ela é clara)
+# e roda em três cenários prontos + um cenário montado pela pessoa nos sliders.
 with abas[2]:
     st.subheader(L("Pra onde o negócio vai", "Where the business is going"))
     c = st.columns([1, 1, 2])
@@ -452,6 +484,7 @@ with abas[2]:
         m_cac = s[2].slider("CAC", -30, 30, 0, 5, format="%d%%")
         m_reaj = s[3].slider(L("Reajuste/ano", "Price incr./yr"), 0, 10, 0, 1, format="%d%%")
     prem = c_premissas(ULT)
+    # Transformando os sliders em multiplicadores sobre as premissas (ex.: churn -10% → 0,90).
     meu = dict(ativ=1 + m_ativ / 100, churn=1 + m_churn / 100, cac=1 + m_cac / 100, custo=1.0, verba=1.0,
                reajuste=m_reaj / 100, cresc=1.0)
 
@@ -466,6 +499,7 @@ with abas[2]:
     hist["resultado"] = hist.mc - CUSTO_FIXO
     fig = go.Figure()
     fig.add_scatter(x=hist.index, y=hist[metrica], name=L("Realizado", "Actual"), line=dict(color=AZUL_ESC, width=2.5))
+    # Faixa provável do cenário base: P10 a P90 das 600 simulações.
     mf, simf = c_sim(ULT, horiz)
     if metrica == "base":
         tot = simf["base"].sum(axis=1)
@@ -481,6 +515,7 @@ with abas[2]:
             ("base", L("Base", "Base"), AZUL, "solid", M.CENARIOS["base"]),
             ("pessimista", L("Pessimista", "Pessimistic"), VERMELHO, "dot", M.CENARIOS["pessimista"]),
             ("meu", L("Seu cenário", "Your scenario"), AMARELO, "dash", meu)]
+    # Rodando cada cenário e montando a tabela por ano (ano incompleto fica marcado).
     for chave, nome_c, cor, traco, mult in cens:
         mm, out = M.forecast(real, prem, ULT, horiz, SAZ, mult)
         fig.add_scatter(x=mm, y=serie(out, mm), name=nome_c, line=dict(color=cor, dash=traco, width=2.2 if chave != "meu" else 3))
@@ -544,6 +579,8 @@ with abas[2]:
                  "activation, +10% churn, +12% CAC, no increase. The blue band comes from 600 simulations of the base case."))
 
 # ================================================================== SENSIBILIDADE
+# Pergunta: qual alavanca mais mexe no resultado?
+# Mexendo uma alavanca por vez (±choque) e medindo o resultado dos próximos 12 meses (gráfico tornado).
 with abas[3]:
     st.subheader(L("Qual alavanca mais mexe no resultado", "Which lever moves the result the most"))
     choque = st.select_slider(L("Tamanho do choque em cada alavanca", "Shock size on each lever"), options=[5, 10, 20], value=10,
@@ -561,6 +598,7 @@ with abas[3]:
     s_i = sens.set_index("alavanca")
     _pr = c_premissas(ULT)
     _b = real[real.mes == ULT].set_index("parceiro").base_final_mil.reindex(_pr.index)
+    # Churn médio ponderado pela base (média simples daria peso demais pra parceiro pequeno).
     churn_med = float((_pr.churn * _b).sum() / _b.sum() * 100)   # churn médio ponderado pela base
     caixa(L(
         f"<b>Como ler:</b> cada barra mostra quanto o resultado dos próximos 12 meses muda se só aquela alavanca andar {choque}%. "
@@ -579,6 +617,11 @@ with abas[3]:
         f"it looks small, but it's {din(abs(s_i.loc['churn','menos']))} more in the year."))
 
 # ================================================================== OKRs
+# Pergunta: os KRs estão bem escritos e qual a chance de bater cada um?
+# 1. Simulando nov e dez 600 vezes a partir do realizado até out
+# 2. Pra cada KR, contando em quantas simulações a meta é batida (metas editáveis)
+# 3. Pintando o card na cor do farol
+# 4. Checklist do KR bem escrito: métrica, linha de base, meta, prazo, fonte e dono
 with abas[4]:
     st.subheader(L("OKRs do 4º trimestre de 2026", "Q4 2026 OKRs"))
     st.markdown(L(f"Chance de bater cada KR com o realizado até {mes_txt(ULT)} e 600 simulações de nov e dez. Mude as metas e veja o farol mudar.",
@@ -609,8 +652,10 @@ with abas[4]:
         meta_mc = e[2].number_input(L("MC Q4 mín. (R$ mil)", "Min Q4 margin (R$ K)"), value=28500, step=100)
         meta_cac = e[3].number_input(L("CAC dez máx. (R$)", "Max Dec CAC (R$)"), value=48.0, step=1.0)
         meta_del = e[4].number_input(L("Churn Delta dez máx. (%)", "Max Delta Dec churn (%)"), value=9.5, step=0.1, format="%.1f")
+    # Churn do Q4 = cancelamentos de out a dez ÷ soma das bases do início de cada mês.
     churn_q4 = (out_.cancelamentos_mil.sum() + sq["cancelamentos"].sum(axis=(1, 2))) / \
                (out_.base_inicial_mil.sum() + out_.base_final_mil.sum() + sq["base"][:, :, 0].sum(axis=1)) * 100
+    # Os 5 KRs que dá pra projetar: valor simulado (v), meta, se a meta é de máximo ou mínimo e linha de base de set.
     krs = [
         dict(obj=L("O1 · Crescer a base com rentabilidade", "O1 · Grow the base profitably"),
              kr=L(f"Base ativa em dez/2026 ≥ {gente(meta_base)}", f"Active base in Dec/2026 ≥ {gente(meta_base)}"),
@@ -637,6 +682,7 @@ with abas[4]:
              base_ref=real[(real.parceiro == "Varejo Delta") & (real.mes == "2026-09-01")].eval("cancelamentos_mil / base_inicial_mil * 100").iloc[0],
              alav="churn", dono=L("Gerente da conta Delta", "Delta account manager"), fonte=L("base de assinantes do parceiro", "partner subscriber base")),
     ]
+    # Dois KRs de exemplo que não dá pra projetar: um mal escrito e um marco (sim/não).
     ruins = [
         dict(obj=L("O2 · Fazer o canal direto se pagar", "O2 · Make the direct channel pay off"),
              kr=L("Melhorar o engajamento dos usuários", "Improve user engagement"), tipo="mal"),
@@ -649,6 +695,7 @@ with abas[4]:
 
     cols = st.columns(3)
     for n_, k_ in enumerate(krs):
+        # Verificando, simulação por simulação, se a meta foi batida.
         ok = (k_["v"] >= k_["meta"]) if k_["maior"] else (k_["v"] <= k_["meta"])
         pr = round(float(ok.mean()), 2)   # arredonda antes do farol: a cor bate com o % do card
         fundo, cor_t, ic, rot = FAROL[farol(pr)]
@@ -694,6 +741,8 @@ with abas[4]:
                  "Light: green at 70%+ chance, yellow between 40% and 70%, red below 40%."))
 
 # ================================================================== PARCEIROS
+# Pergunta: quem dá dinheiro e quem só dá volume?
+# Rentabilidade dos últimos 12 meses (margem, churn, LTV) e simulador de renegociação de tarifa.
 with abas[5]:
     st.subheader(L("Quem dá dinheiro e quem só dá volume", "Who brings money and who only brings volume"))
     rent = M.rentabilidade(real, ULT)
@@ -745,7 +794,9 @@ with abas[5]:
     alvo_mc = s[1].slider(L("Margem % desejada", "Target margin %"), 30, 80, 60, 5)
     queda = s[2].slider(L("Churn depois da ação (%/mês)", "Churn after action (%/mo)"), 2.0, 12.0, float(round(rent.loc[alvo_p].churn * 2) / 2), 0.5, format="%.1f%%")
     pr_ = c_premissas(ULT).loc[alvo_p]
+    # Tarifa mínima pra margem desejada: margem = (tarifa - custo) ÷ tarifa → tarifa = custo ÷ (1 - margem).
     tarifa_min = pr_.custo / (1 - alvo_mc / 100)
+    # LTV com o churn depois da ação de retenção (tarifa de hoje).
     ltv_novo = (pr_.preco - pr_.custo) / (queda / 100)
     ltv_mais = (max(tarifa_min, pr_.preco) - pr_.custo) / (queda / 100)
     k = st.columns(3)
@@ -762,6 +813,9 @@ with abas[5]:
                  f"With the minimum fee and the new churn together, LTV goes to R$ {br(ltv_mais, 0)}. LTV here = margin per subscriber per month ÷ monthly churn."))
 
 # ================================================================== NOVO PAÍS
+# Pergunta: vale abrir um mercado novo?
+# Funil do mercado à base, caixa acumulado em 36 meses, VPL, payback e 800 simulações das premissas.
+# As premissas são ilustrativas: o que importa é a estrutura da decisão.
 with abas[6]:
     st.subheader(L("Vale abrir um país novo?", "Is a new country worth it?"))
     st.markdown(L("Business case de entrada num mercado novo pelo mesmo modelo B2B2C. **As premissas abaixo são ilustrativas**, "
@@ -793,6 +847,8 @@ with abas[6]:
                                  "tarifa, 40% disso, porque a tarifa é fechada em contrato e varia menos.",
                                  "How much activation can vary up or down in the simulations. Churn varies half as much "
                                  "and the fee 40% as much, because the fee is set in a contract and varies less."))
+    # Base elegível = população × % com smartphone × % cliente dos parceiros.
+    # Base em regime = ponto em que entra o mesmo tanto que sai (elegível × ativação ÷ churn).
     elegivel = pop * smart / 100 * parc / 100
     regime = elegivel * (ativ_p / 100) / (churn_p / 100)
     p_bc = dict(elegivel=elegivel, ativ=ativ_p / 100, churn=churn_p / 100, tarifa=tarifa_p, custo=custo_p, investimento=inv,
@@ -850,6 +906,7 @@ with abas[6]:
     k[1].metric("Payback", L(f"mês {payback}", f"month {payback}") if payback else L("não se paga em 36 meses", "no payback in 36 months"))
     k[2].metric(L("Chance de VPL positivo", "Chance of positive NPV"), chance(p_vpl))
     k[3].metric(L("Chance de se pagar em até 24 meses", "Chance of payback within 24 months"), chance(p_pb24))
+    # Recomendação pela chance de VPL positivo, na mesma régua do farol.
     if p_vpl >= 0.7:
         dec, cor_d = L("Seguir", "Go"), "verde"
         txt = L("Mesmo com as premissas variando, a entrada se paga na maioria dos cenários.", "Even with the assumptions varying, entry pays off in most scenarios.")
@@ -869,6 +926,7 @@ with abas[6]:
                 f"<div class='m'>{txt}</div></div>", unsafe_allow_html=True)
 
     st.markdown(L("#### Onde está a fronteira", "#### Where the line is"))
+    # Mapa de fronteira: payback pra cada combinação de ativação e tarifa em volta das premissas.
     ativs = np.round(np.linspace(ativ_p * 0.6, ativ_p * 1.4, 7), 3)
     tarifas = np.round(np.linspace(tarifa_p * 0.7, tarifa_p * 1.3, 7), 2)
     z = np.zeros((len(tarifas), len(ativs)))
@@ -897,6 +955,7 @@ with abas[6]:
           "must be true for the bet to work, and that's what a pilot should test before the big investment."))
 
 # ================================================================== COMO FUNCIONA
+# O método em 6 passos com exemplos, o backtest do forecast e o que foi plantado na base.
 with abas[7]:
     st.subheader(L("Como o Janus faz as contas", "How Janus does the math"))
     st.markdown(L("""
@@ -980,6 +1039,7 @@ gives R$ 97: activation "cost" R$ 3. Swapping churn too, it gives R$ 98: churn "
 is swapped and you reach the actual.
 """))
     st.markdown(L("#### O forecast acerta?", "#### Does the forecast work?"))
+    # Backtest: em cada mês do passado, prevendo 3 meses à frente só com o que se sabia ali.
     bt = c_backtest()
     fig = go.Figure()
     fig.add_bar(x=bt.alvo, y=bt.erro_mc, name=L("Margem de contribuição", "Contribution margin"), marker_color=AZUL)
